@@ -1,0 +1,138 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(EMPLOYEE)
+  company   String
+  managerId String?
+  manager   User?    @relation("ManagerEmployee", fields: [managerId], references: [id])
+  employees User[]   @relation("ManagerEmployee")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  
+  expenses          Expense[]        @relation("EmployeeExpenses")
+  approvalSteps     ApprovalStep[]
+  adminOfCompany    Company?         @relation("CompanyAdmin")  // ← ADD THIS LINE
+  
+  @@index([email])
+  @@index([company])
+}
+
+model Company {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  defaultCurrency String   @default("USD")
+  adminId         String   @unique  // ← ADD @unique here
+  admin           User     @relation("CompanyAdmin", fields: [adminId], references: [id])  // ← ADD "CompanyAdmin"
+  
+  workflowType         WorkflowType @default(SEQUENTIAL)
+  percentageRequired   Int          @default(100)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([name])
+}
+
+model Expense {
+  id                String   @id @default(uuid())
+  employeeId        String
+  employee          User     @relation("EmployeeExpenses", fields: [employeeId], references: [id])
+  
+  amount            Float
+  originalAmount    Float
+  originalCurrency  String   @default("USD")
+  convertedAmount   Float
+  companyCurrency   String   @default("USD")
+  exchangeRate      Float    @default(1.0)
+  
+  category          ExpenseCategory
+  description       String
+  date              DateTime
+  receiptUrl        String?
+  
+  status            ExpenseStatus   @default(PENDING)
+  
+  approvalSteps     ApprovalStep[]
+  currentStep       Int             @default(0)
+  
+  workflowType         WorkflowType @default(SEQUENTIAL)
+  percentageRequired   Int          @default(100)
+  
+  finalComments     String?
+  submittedAt       DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([employeeId])
+  @@index([status])
+  @@index([submittedAt])
+}
+
+model ApprovalStep {
+  id          String   @id @default(uuid())
+  expenseId   String
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  
+  stepNumber  Int
+  approverRole String
+  approverId  String?
+  approver    User?    @relation(fields: [approverId], references: [id])
+  
+  status      ApprovalStatus @default(PENDING)
+  comments    String?
+  isMandatory Boolean        @default(false)
+  approvedAt  DateTime?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([expenseId])
+  @@index([approverId, status])
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum ExpenseCategory {
+  TRAVEL
+  FOOD
+  ACCOMMODATION
+  TRANSPORTATION
+  OFFICE_SUPPLIES
+  ENTERTAINMENT
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  PARTIALLY_APPROVED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WorkflowType {
+  SEQUENTIAL
+  PERCENTAGE
+  MANDATORY
+  HYBRID
+}
